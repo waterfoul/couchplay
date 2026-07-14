@@ -3,7 +3,7 @@
     "runtime": "org.kde.Platform",
     "runtime-version": "6.10",
     "sdk": "org.kde.Sdk",
-    "command": "couchplay",
+    "command": "couchplay-gamemode",
     "finish-args": [
         "--share=ipc",
         "--share=network",
@@ -13,9 +13,18 @@
         "--device=all",
         "--talk-name=org.kde.StatusNotifierWatcher",
         "--talk-name=org.freedesktop.Flatpak",
+        "--talk-name=org.kde.KWin",
         "--system-talk-name=org.freedesktop.login1",
-        "--system-talk-name=io.github.hikaps.CouchPlayHelper",
-        "--filesystem=xdg-run"
+        "--system-talk-name=io.github.hikaps.CouchPlayHelper"
+    ],
+    "cleanup": [
+        "/include",
+        "/lib/pkgconfig",
+        "/share/man",
+        "/share/gtk-doc",
+        "*.la",
+        "*.a",
+        "/bin/patchelf"
     ],
     "modules": [
         {
@@ -28,13 +37,11 @@
         },
         {
             "name": "polkit",
-            "buildsystem": "meson",
-            "config-opts": [
-                "-Dlibdir=lib",
-                "-Dauthfw=shadow",
-                "-Dsession_tracking=libsystemd-login",
-                "-Djs_engine=duktape",
-                "-Dintrospection=false"
+            "buildsystem": "simple",
+            "build-commands": [
+                "meson setup --prefix=/app --libdir=lib -Dauthfw=shadow -Dsession_tracking=libsystemd-login -Djs_engine=duktape -Dintrospection=false build",
+                "ninja -C build",
+                "ninja -C build install"
             ],
             "sources": [
                 {
@@ -42,8 +49,7 @@
                     "url": "https://gitlab.freedesktop.org/polkit/polkit.git",
                     "tag": "124"
                 }
-            ],
-            "cleanup": ["/include", "/lib/pkgconfig", "*.a"]
+            ]
         },
         {
             "name": "polkit-qt-1",
@@ -58,12 +64,6 @@
                     "url": "https://github.com/KDE/polkit-qt-1.git",
                     "commit": "fbb50e964bcb260d3b716195ef80dd100b87951b"
                 }
-            ],
-            "cleanup": [
-                "/lib/pkgconfig",
-                "/include",
-                "*.a",
-                "*.la"
             ]
         },
         {
@@ -75,8 +75,7 @@
                     "url": "https://github.com/NixOS/patchelf/releases/download/0.19.1/patchelf-0.19.1.tar.gz",
                     "sha256": "491108728f120ce05b539934b41a750235031a6df8abc6b47e57aff7de15094d"
                 }
-            ],
-            "cleanup": ["*"]
+            ]
         },
         {
             "name": "couchplay",
@@ -104,12 +103,6 @@
                 "install -Dm644 data/icons/io.github.hikaps.couchplay.png ${FLATPAK_DEST}/share/icons/hicolor/512x512/apps/io.github.hikaps.couchplay.png",
                 "chmod +x scripts/bundle-libs.sh",
                 "./scripts/bundle-libs.sh ${FLATPAK_DEST}/libexec/couchplay-helper lib/couchplay"
-            ],
-            "cleanup": [
-                "/lib/pkgconfig",
-                "/include",
-                "*.a",
-                "*.la"
             ]
         }
     ]

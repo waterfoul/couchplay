@@ -157,6 +157,8 @@ Run the app you just built (only on a distro with matching Qt6, e.g. Fedora — 
 ./build/bin/couchplay
 ```
 
+For building and setting up a native development environment on **SteamOS** (Steam Deck), please refer to the [SteamOS Native Build & Development Setup Guide](docs/steamos-build-setup.md).
+
 ### Running Tests
 ```bash
 ctest --test-dir build --output-on-failure

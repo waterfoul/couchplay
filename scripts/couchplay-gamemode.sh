@@ -41,13 +41,28 @@ else
     exit 1
 fi
 
-# kwin_wayland binary: prefer system, then Flatpak
-if command -v kwin_wayland &>/dev/null; then
-    KWIN_BIN="$(command -v kwin_wayland)"
+# kwin_wayland binary: check if running inside Flatpak
+IS_FLATPAK=false
+if [ -f /.flatpak-info ]; then
+    IS_FLATPAK=true
+fi
+
+KWIN_BIN=""
+if [ "$IS_FLATPAK" = true ]; then
+    # We are inside a Flatpak sandbox. Check if kwin_wayland is available on the host.
+    if ! flatpak-spawn --host sh -c "command -v kwin_wayland" &>/dev/null; then
+        echo "Error: kwin_wayland not found on host."
+        echo "Please install kwin_wayland on the host system."
+        exit 1
+    fi
 else
-    echo "Error: kwin_wayland not found."
-    echo "Install kwin_wayland (usually part of kwin or plasma-workspace)."
-    exit 1
+    if command -v kwin_wayland &>/dev/null; then
+        KWIN_BIN="$(command -v kwin_wayland)"
+    else
+        echo "Error: kwin_wayland not found."
+        echo "Install kwin_wayland (usually part of kwin or plasma-workspace)."
+        exit 1
+    fi
 fi
 
 # --- Environment detection ---
@@ -95,19 +110,56 @@ fi
 
 echo "Starting nested KWin Wayland compositor..."
 
+SOCKET_NAME="wayland-couchplay"
+
+# Clean up any stale socket
+rm -f "$XDG_RUNTIME_DIR/$SOCKET_NAME"
+
 # Start kwin_wayland as a nested compositor inside gamescope.
 # --no-lockscreen: disable the lock screen (we're inside Game Mode)
 # --no-global-shortcuts: avoid conflicting with Steam's shortcuts
 # --width/--height: match the gamescope output resolution
 # kwin_wayland will render as a Wayland window inside gamescope.
-"$KWIN_BIN" \
-    --no-lockscreen \
-    --no-global-shortcuts \
-    --width "${GAMESCOPE_WIDTH:-1920}" \
-    --height "${GAMESCOPE_HEIGHT:-1080}" \
-    &
+if [ "$IS_FLATPAK" = true ]; then
+    # When sandboxed, we run kwin_wayland on the host. To make the socket
+    # accessible inside the sandbox, we tell kwin to create the socket
+    # relative to the host's XDG_RUNTIME_DIR inside the Flatpak app's runtime dir.
+    flatpak-spawn --host kwin_wayland \
+        --no-lockscreen \
+        --no-global-shortcuts \
+        --width "${GAMESCOPE_WIDTH:-1920}" \
+        --height "${GAMESCOPE_HEIGHT:-1080}" \
+        --socket "app/io.github.hikaps.couchplay/$SOCKET_NAME" \
+        &
+else
+    "$KWIN_BIN" \
+        --no-lockscreen \
+        --no-global-shortcuts \
+        --width "${GAMESCOPE_WIDTH:-1920}" \
+        --height "${GAMESCOPE_HEIGHT:-1080}" \
+        --socket "$SOCKET_NAME" \
+        &
+fi
 
 KWIN_PID=$!
+
+# Wait for the new Wayland socket to appear in XDG_RUNTIME_DIR (up to 10 seconds)
+echo "Waiting for nested KWin Wayland socket..."
+SOCKET_FOUND=false
+for i in $(seq 1 20); do
+    if [ -S "$XDG_RUNTIME_DIR/$SOCKET_NAME" ]; then
+        SOCKET_FOUND=true
+        break
+    fi
+    sleep 0.5
+done
+
+if [ "$SOCKET_FOUND" = true ]; then
+    echo "Found nested KWin Wayland socket: $SOCKET_NAME"
+    export WAYLAND_DISPLAY="$SOCKET_NAME"
+else
+    echo "Warning: Nested KWin Wayland socket not found. Falling back to default."
+fi
 
 # Wait for KWin to register on D-Bus (up to 10 seconds)
 echo "Waiting for KWin D-Bus interface..."

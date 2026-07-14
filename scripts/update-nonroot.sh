@@ -96,7 +96,7 @@ main() {
     check_dependencies
     
     # Setup temporary directory and cleanup trap
-    TEMP_DIR=$(mktemp -d)
+    TEMP_DIR=$(mktemp -d -p "$HOME")
     cleanup() {
         rm -rf "$TEMP_DIR"
     }
@@ -118,11 +118,19 @@ main() {
     # Create a temporary copy of the manifest with local directory source override
     local manifest_copy="${TEMP_DIR}/io.github.hikaps.couchplay.json"
     cp io.github.hikaps.couchplay.json "$manifest_copy"
-    # Replace the git source block with a local directory source block
-    sed -i 's|"type": "git"|"type": "dir"|' "$manifest_copy"
-    sed -i 's|"url": "https://github.com/hikaps/couchplay.git",||' "$manifest_copy"
-    sed -i 's|"branch": "main"|"path": "."|' "$manifest_copy"
-    sed -i 's|"branch": "develop"|"path": "."|' "$manifest_copy"
+    # Replace the git source block for the couchplay module with a local directory source block using absolute path
+    python3 -c "
+import json, sys, os
+manifest_path = sys.argv[1]
+project_dir = os.getcwd()
+with open(manifest_path, 'r') as f:
+    data = json.load(f)
+for m in data.get('modules', []):
+    if m.get('name') == 'couchplay':
+        m['sources'] = [{'type': 'dir', 'path': project_dir}]
+with open(manifest_path, 'w') as f:
+    json.dump(data, f, indent=4)
+" "$manifest_copy"
     
     flatpak-builder --user --install --force-clean --install-deps-from=flathub "${TEMP_DIR}/build-dir" "$manifest_copy"
     

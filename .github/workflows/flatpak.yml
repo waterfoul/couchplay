@@ -27,10 +27,18 @@ jobs:
             exit 1
           fi
 
-      - name: Build app from develop for beta
-        if: github.ref == 'refs/heads/develop'
+      - name: Point manifest to local source
         run: |
-          sed -i 's|"branch": "main"|"branch": "develop"|' io.github.hikaps.couchplay.json
+          python3 -c "
+          import json
+          with open('io.github.hikaps.couchplay.json', 'r') as f:
+              data = json.load(f)
+          for m in data.get('modules', []):
+              if m.get('name') == 'couchplay':
+                  m['sources'] = [{'type': 'dir', 'path': '.'}]
+          with open('io.github.hikaps.couchplay.json', 'w') as f:
+              json.dump(data, f, indent=4)
+          "
 
       - name: Install flatpak-builder
         run: |

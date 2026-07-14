@@ -18,6 +18,10 @@
 #   - sha256sum: for verifying checksums
 #   - x86_64 architecture
 
+# Define repo owner and name (overridable via environment variables)
+REPO_OWNER="${REPO_OWNER:-hikaps}"
+REPO_NAME="${REPO_NAME:-couchplay}"
+
 # Re-run with sudo if not root (allows piped input to work with visible output)
 if [[ $EUID -ne 0 ]]; then
     echo "Requesting sudo access to install CouchPlay..."
@@ -31,9 +35,9 @@ if [[ $EUID -ne 0 ]]; then
         INSTALLER_BRANCH="main"
     fi
     TMP_SCRIPT=$(mktemp)
-    curl -fsSL "https://raw.githubusercontent.com/hikaps/couchplay/${INSTALLER_BRANCH}/scripts/install.sh" > "$TMP_SCRIPT"
+    curl -fsSL "https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${INSTALLER_BRANCH}/scripts/install.sh" > "$TMP_SCRIPT"
     chmod +x "$TMP_SCRIPT"
-    exec sudo "$TMP_SCRIPT" "$@"
+    exec sudo REPO_OWNER="$REPO_OWNER" REPO_NAME="$REPO_NAME" "$TMP_SCRIPT" "$@"
 fi
 
 set -e
@@ -41,9 +45,7 @@ set -e
 # Configuration
 # =============================================================================
 
-REPO_OWNER="hikaps"
-REPO_NAME="couchplay"
-GITHUB_API="https://api.github.com"
+GITHUB_API="${GITHUB_API:-https://api.github.com}"
 
 # Installation paths (overridable via environment)
 PREFIX="${PREFIX:-/usr/local}"
@@ -61,15 +63,15 @@ NC='\033[0m' # No Color
 # =============================================================================
 
 print_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+    echo -e "${GREEN}[INFO]${NC} $1" >&2
 }
 
 print_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+    echo -e "${YELLOW}[WARN]${NC} $1" >&2
 }
 
 print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
 # =============================================================================
@@ -206,14 +208,16 @@ get_latest_release() {
     response=$(echo "$response" | sed '$d')
     
     if [[ "$http_code" != "200" ]]; then
-        print_error "Failed to fetch release information (HTTP $http_code)"
-        echo ""
-        echo "This could mean:"
-        echo "  - No releases have been published yet"
-        echo "  - GitHub API rate limit exceeded"
-        echo "  - Network connectivity issues"
-        echo ""
-        echo "Please check: https://github.com/${REPO_OWNER}/${REPO_NAME}/releases"
+        {
+            print_error "Failed to fetch release information (HTTP $http_code)"
+            echo ""
+            echo "This could mean:"
+            echo "  - No releases have been published yet"
+            echo "  - GitHub API rate limit exceeded"
+            echo "  - Network connectivity issues"
+            echo ""
+            echo "Please check: https://github.com/${REPO_OWNER}/${REPO_NAME}/releases"
+        } >&2
         exit 1
     fi
     
@@ -236,14 +240,16 @@ get_beta_release() {
     response=$(echo "$response" | sed '$d')
 
     if [[ "$http_code" != "200" ]]; then
-        print_error "Failed to fetch beta release information (HTTP $http_code)"
-        echo ""
-        echo "This could mean:"
-        echo "  - No beta release has been published yet"
-        echo "  - GitHub API rate limit exceeded"
-        echo "  - Network connectivity issues"
-        echo ""
-        echo "Please check: https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/tag/beta"
+        {
+            print_error "Failed to fetch beta release information (HTTP $http_code)"
+            echo ""
+            echo "This could mean:"
+            echo "  - No beta release has been published yet"
+            echo "  - GitHub API rate limit exceeded"
+            echo "  - Network connectivity issues"
+            echo ""
+            echo "Please check: https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/tag/beta"
+        } >&2
         exit 1
     fi
 
@@ -289,6 +295,9 @@ download_file() {
         return 1
     fi
     
+    # Ensure the real user can read/access this file (needed for Flatpak install & Steam artwork)
+    chown "$REAL_USER:$REAL_USER" "$output" 2>/dev/null || true
+    chmod 644 "$output" 2>/dev/null || true
     return 0
 }
 
@@ -485,6 +494,277 @@ REAL_USER="${SUDO_USER:-deck}"
 REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
 REAL_HOME="${REAL_HOME:-/home/deck}"
 
+# Global variables for Steam shortcut setup
+SKIP_STEAM=false
+FORCE_STEAM=false
+
+configure_steam_shortcut() {
+    local BETA="$1"
+    
+    if $SKIP_STEAM; then
+        print_info "Skipping Steam shortcut setup as requested."
+        return 0
+    fi
+
+    # Find all Steam config directories under REAL_HOME
+    local possible_roots=(
+        "${REAL_HOME}/.steam/steam/userdata"
+        "${REAL_HOME}/.local/share/Steam/userdata"
+        "${REAL_HOME}/.var/app/com.valvesoftware.Steam/.local/share/Steam/userdata"
+    )
+    
+    local config_dirs=()
+    for root in "${possible_roots[@]}"; do
+        if [[ -d "$root" ]]; then
+            # Find subdirectories that are digits (representing user IDs)
+            for d in "$root"/*; do
+                if [[ -d "$d" && "$(basename "$d")" =~ ^[0-9]+$ ]]; then
+                    if [[ -d "$d/config" ]]; then
+                        config_dirs+=("$d/config")
+                    fi
+                fi
+            done
+        fi
+    done
+    
+    if [[ ${#config_dirs[@]} -eq 0 ]]; then
+        print_warn "No Steam userdata directories found. Skipping Steam shortcut configuration."
+        return 0
+    fi
+
+    local steam_running=false
+    if pgrep -x "steam" >/dev/null; then
+        steam_running=true
+    fi
+
+    local proceed=false
+    local close_steam=false
+
+    if $FORCE_STEAM; then
+        proceed=true
+        if $steam_running; then
+            close_steam=true
+        fi
+    else
+        # Prompt user if interactive
+        if [[ -t 0 ]]; then
+            if $steam_running; then
+                echo -e "${YELLOW}[PROMPT]${NC} Steam is currently running. Steam must be closed to apply new shortcuts."
+                read -p "Would you like to close Steam and add CouchPlay to your Steam library? (y/n) [n]: " -r
+                if [[ "$REPLY" =~ ^[Yy]$ ]]; then
+                    proceed=true
+                    close_steam=true
+                fi
+            else
+                read -p "Would you like to add CouchPlay to your Steam library and set up its custom artwork? (y/n) [y]: " -r
+                # Default is yes if they just press enter or type y/Y
+                if [[ -z "$REPLY" || "$REPLY" =~ ^[Yy]$ ]]; then
+                    proceed=true
+                fi
+            fi
+        else
+            # Non-interactive fallback
+            if $steam_running; then
+                print_warn "Steam is running and script is non-interactive. Skipping Steam shortcut configuration."
+                proceed=false
+            else
+                print_info "Running non-interactively. Safe to add shortcut since Steam is not running."
+                proceed=true
+            fi
+        fi
+    fi
+
+    if ! $proceed; then
+        print_info "Steam shortcut configuration skipped."
+        return 0
+    fi
+
+    # Close Steam if required
+    local steam_was_closed=false
+    if $close_steam && $steam_running; then
+        print_info "Closing Steam..."
+        pkill -x steam || killall steam || true
+        steam_was_closed=true
+        sleep 3
+    fi
+
+    # Download and prepare all specialized artwork items to TEMP_DIR
+    local branch="main"
+    if [[ "$BETA" == "true" ]]; then
+        branch="develop"
+    fi
+
+    # Format: "repo_filename:target_suffix:target_extension"
+    local artwork_items=(
+        "steam_vertical_capsule.jpg:p:.jpg"
+        "steam_horizontal_grid.jpg::.jpg"
+        "steam_hero.jpg:_hero:.jpg"
+        "steam_logo.jpg:_logo:.jpg"
+        "icon.png:_icon:.png"
+    )
+
+    for item in "${artwork_items[@]}"; do
+        IFS=":" read -r repo_file suffix ext <<< "$item"
+        local local_tmp="${TEMP_DIR}/${repo_file}"
+        local download_url="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${branch}/assets/${repo_file}"
+        
+        print_info "Preparing artwork: ${repo_file}..."
+        if ! download_file "$download_url" "$local_tmp" &>/dev/null; then
+            # Check local checkouts or fallbacks
+            local local_fallback="./assets/${repo_file}"
+            local system_flatpak_icon="/var/lib/flatpak/exports/share/icons/hicolor/512x512/apps/io.github.hikaps.couchplay.png"
+            local user_flatpak_icon="${REAL_HOME}/.local/share/flatpak/exports/share/icons/hicolor/512x512/apps/io.github.hikaps.couchplay.png"
+            
+            if [[ -f "$local_fallback" ]]; then
+                cp "$local_fallback" "$local_tmp"
+            elif [[ "$repo_file" == "icon.png" && -f "$user_flatpak_icon" ]]; then
+                cp "$user_flatpak_icon" "$local_tmp"
+            elif [[ "$repo_file" == "icon.png" && -f "$system_flatpak_icon" ]]; then
+                cp "$system_flatpak_icon" "$local_tmp"
+            fi
+        fi
+    done
+
+    # Inline Python script to update shortcuts.vdf and return AppID
+    local py_script
+    py_script=$(cat <<'EOF'
+import os
+import sys
+import struct
+import binascii
+from pathlib import Path
+
+APP_NAME = "CouchPlay"
+EXE = "/usr/bin/flatpak"
+LAUNCH_OPTIONS = "run io.github.hikaps.couchplay"
+
+def calculate_appid(exe, appname):
+    salt = f'"{exe}"{appname}'.encode("utf-8")
+    return (binascii.crc32(salt) | 0x80000000) & 0xffffffff
+
+def add_shortcut(vdf_path):
+    if not vdf_path.exists():
+        vdf_path.parent.mkdir(parents=True, exist_ok=True)
+        data = b"\x00shortcuts\x00\x08\x08"
+    else:
+        with open(vdf_path, "rb") as f:
+            data = f.read()
+            
+    if f"\x01appname\x00{APP_NAME}\x00".encode("utf-8") in data:
+        return calculate_appid(EXE, APP_NAME), False
+        
+    idx = 0
+    while True:
+        if f"\x00{idx}\x00".encode("ascii") in data:
+            idx += 1
+        else:
+            break
+            
+    entry = bytearray()
+    entry.append(0x00)
+    entry.extend(str(idx).encode("ascii") + b"\x00")
+    
+    appid = calculate_appid(EXE, APP_NAME)
+    entry.append(0x02)
+    entry.extend(b"appid\x00")
+    entry.extend(struct.pack("<I", appid))
+    
+    entry.append(0x01)
+    entry.extend(b"appname\x00")
+    entry.extend(APP_NAME.encode("utf-8") + b"\x00")
+    
+    entry.append(0x01)
+    entry.extend(b"Exe\x00")
+    entry.extend(f'"{EXE}"'.encode("utf-8") + b"\x00")
+    
+    entry.append(0x01)
+    entry.extend(b"StartDir\x00")
+    entry.extend(f'"{os.path.dirname(EXE)}"'.encode("utf-8") + b"\x00")
+    
+    icon_path = str(vdf_path.parent / f"grid/{appid}_icon.png")
+    entry.append(0x01)
+    entry.extend(b"icon\x00")
+    entry.extend(icon_path.encode("utf-8") + b"\x00")
+    
+    entry.append(0x01)
+    entry.extend(b"LaunchOptions\x00")
+    entry.extend(LAUNCH_OPTIONS.encode("utf-8") + b"\x00")
+    
+    entry.append(0x02)
+    entry.extend(b"IsShortcut\x00")
+    entry.extend(struct.pack("<I", 1))
+    
+    entry.append(0x08)
+    
+    if data.endswith(b"\x08\x08"):
+        new_data = data[:-2] + entry + b"\x08\x08"
+    else:
+        new_data = data.rstrip(b"\x08") + entry + b"\x08\x08"
+        
+    with open(vdf_path, "wb") as f:
+        f.write(new_data)
+    return appid, True
+
+try:
+    vdf_file = Path(sys.argv[1])
+    appid, added = add_shortcut(vdf_file)
+    print(f"{appid}:{added}")
+except Exception as e:
+    print(f"ERROR:{e}", file=sys.stderr)
+    sys.exit(1)
+EOF
+)
+
+    for cfg_dir in "${config_dirs[@]}"; do
+        local shortcuts_file="${cfg_dir}/shortcuts.vdf"
+        print_info "Adding shortcut to ${shortcuts_file}..."
+        
+        local py_out
+        py_out=$(sudo -u "$REAL_USER" python3 -c "$py_script" "$shortcuts_file" 2>/dev/null || true)
+        
+        if [[ "$py_out" =~ ^[0-9]+:.* ]]; then
+            local appid="${py_out%%:*}"
+            local added="${py_out##*:}"
+            
+            # Setup grid artwork
+            local grid_dir="${cfg_dir}/grid"
+            sudo -u "$REAL_USER" mkdir -p "$grid_dir"
+            
+            local copied_any=false
+            for item in "${artwork_items[@]}"; do
+                IFS=":" read -r repo_file suffix ext <<< "$item"
+                local local_tmp="${TEMP_DIR}/${repo_file}"
+                local dest_file="${grid_dir}/${appid}${suffix}${ext}"
+                
+                if [[ -f "$local_tmp" ]]; then
+                    sudo -u "$REAL_USER" cp "$local_tmp" "$dest_file"
+                    copied_any=true
+                else
+                    # Fallback to copy the icon if this specific layout is missing
+                    local icon_tmp="${TEMP_DIR}/icon.png"
+                    if [[ -f "$icon_tmp" ]]; then
+                        local dest_png_file="${grid_dir}/${appid}${suffix}.png"
+                        sudo -u "$REAL_USER" cp "$icon_tmp" "$dest_png_file"
+                        copied_any=true
+                    fi
+                fi
+            done
+            
+            if $copied_any; then
+                print_info "Custom artwork set up for Steam Game Mode."
+            fi
+        else
+            print_warn "Could not configure shortcut in ${shortcuts_file}. Check that Python is installed."
+        fi
+    done
+
+    # Restart Steam if we closed it
+    if $steam_was_closed; then
+        print_info "Restarting Steam..."
+        sudo -u "$REAL_USER" nohup steam >/dev/null 2>&1 &
+    fi
+}
+
 # =============================================================================
 # Installation Pathways
 # =============================================================================
@@ -517,6 +797,8 @@ install_sysext() {
     
     # Setup temporary directory and cleanup trap
     TEMP_DIR=$(mktemp -d)
+    chmod 755 "$TEMP_DIR"
+    chown "$REAL_USER:$REAL_USER" "$TEMP_DIR" 2>/dev/null || true
     trap cleanup EXIT
     
     local raw_file="${TEMP_DIR}/couchplay.steamos.raw"
@@ -545,12 +827,12 @@ install_sysext() {
     fi
     print_info "Ensuring org.kde.Platform 6.10 is installed..."
     sudo -u "$REAL_USER" flatpak install --user --noninteractive -y flathub org.kde.Platform/x86_64/6.10
-    sudo -u "$REAL_USER" flatpak install --user --noninteractive -y "$flatpak_file"
+    sudo -u "$REAL_USER" flatpak install --user --noninteractive --reinstall -y "$flatpak_file"
     
     # Stop existing CouchPlay helper service and systemd-sysext before upgrading
     print_info "Stopping active CouchPlay services..."
-    systemctl stop couchplay-helper.service || true
-    systemctl stop systemd-sysext || true
+    systemctl stop couchplay-helper.service >/dev/null 2>&1 || true
+    systemctl stop systemd-sysext >/dev/null 2>&1 || true
     
     # Clear out any legacy layout folders or old raw files
     rm -rf "$REAL_HOME/.couchplay-extension"
@@ -586,6 +868,9 @@ install_sysext() {
     echo 'KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="0ce6", MODE="0666", TAG+="uaccess", TAG+="seat"' | tee /etc/udev/rules.d/99-couchplay-hidraw.rules
     udevadm control --reload-rules
     udevadm trigger
+    
+    # Configure Steam shortcut and artwork
+    configure_steam_shortcut "$BETA" || true
     
     echo ""
     print_info "=========================================="
@@ -625,6 +910,8 @@ install_tarball() {
     
     # Setup temporary directory and cleanup trap
     TEMP_DIR=$(mktemp -d)
+    chmod 755 "$TEMP_DIR"
+    chown "$REAL_USER:$REAL_USER" "$TEMP_DIR" 2>/dev/null || true
     trap cleanup EXIT
     
     local tarball_file="${TEMP_DIR}/couchplay-x86_64.tar.xz"
@@ -674,6 +961,9 @@ install_tarball() {
         exit 1
     fi
     
+    # Configure Steam shortcut and artwork
+    configure_steam_shortcut "$BETA" || true
+    
     # Success!
     echo ""
     print_info "=========================================="
@@ -699,6 +989,8 @@ main() {
             --beta) BETA=true; shift ;;
             --sysext) FORCE_SYSEXT=true; shift ;;
             --tarball) FORCE_TARBALL=true; shift ;;
+            --skip-steam) SKIP_STEAM=true; shift ;;
+            --force-steam) FORCE_STEAM=true; shift ;;
             *) shift ;;
         esac
     done
