@@ -41,28 +41,10 @@ else
     exit 1
 fi
 
-# kwin_wayland binary: check if running inside Flatpak
+# Detect if running inside Flatpak sandbox
 IS_FLATPAK=false
 if [ -f /.flatpak-info ]; then
     IS_FLATPAK=true
-fi
-
-KWIN_BIN=""
-if [ "$IS_FLATPAK" = true ]; then
-    # We are inside a Flatpak sandbox. Check if kwin_wayland is available on the host.
-    if ! flatpak-spawn --host sh -c "command -v kwin_wayland" &>/dev/null; then
-        echo "Error: kwin_wayland not found on host."
-        echo "Please install kwin_wayland on the host system."
-        exit 1
-    fi
-else
-    if command -v kwin_wayland &>/dev/null; then
-        KWIN_BIN="$(command -v kwin_wayland)"
-    else
-        echo "Error: kwin_wayland not found."
-        echo "Install kwin_wayland (usually part of kwin or plasma-workspace)."
-        exit 1
-    fi
 fi
 
 # --- Environment detection ---
@@ -116,14 +98,17 @@ SOCKET_NAME="wayland-couchplay"
 rm -f "$XDG_RUNTIME_DIR/$SOCKET_NAME"
 
 # Start kwin_wayland as a nested compositor inside gamescope.
-# --no-lockscreen: disable the lock screen (we're inside Game Mode)
-# --no-global-shortcuts: avoid conflicting with Steam's shortcuts
-# --width/--height: match the gamescope output resolution
-# kwin_wayland will render as a Wayland window inside gamescope.
+# Only reached in Game Mode — kwin_wayland check is deferred to here
+# so Desktop Mode launches never fail due to a missing kwin_wayland.
 if [ "$IS_FLATPAK" = true ]; then
-    # When sandboxed, we run kwin_wayland on the host. To make the socket
-    # accessible inside the sandbox, we tell kwin to create the socket
-    # relative to the host's XDG_RUNTIME_DIR inside the Flatpak app's runtime dir.
+    # When sandboxed, run kwin_wayland on the host via flatpak-spawn. The socket
+    # is placed inside the Flatpak app's XDG_RUNTIME_DIR subdirectory so it is
+    # accessible from inside the sandbox.
+    if ! flatpak-spawn --host sh -c "command -v kwin_wayland" &>/dev/null; then
+        echo "Error: kwin_wayland not found on host."
+        echo "Please install kwin_wayland on the host system."
+        exit 1
+    fi
     flatpak-spawn --host kwin_wayland \
         --no-lockscreen \
         --no-global-shortcuts \
@@ -132,6 +117,12 @@ if [ "$IS_FLATPAK" = true ]; then
         --socket "app/io.github.hikaps.couchplay/$SOCKET_NAME" \
         &
 else
+    if ! command -v kwin_wayland &>/dev/null; then
+        echo "Error: kwin_wayland not found."
+        echo "Install kwin_wayland (usually part of kwin or plasma-workspace)."
+        exit 1
+    fi
+    KWIN_BIN="$(command -v kwin_wayland)"
     "$KWIN_BIN" \
         --no-lockscreen \
         --no-global-shortcuts \
