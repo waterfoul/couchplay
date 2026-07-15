@@ -637,7 +637,7 @@ from pathlib import Path
 APP_NAME = "CouchPlay"
 EXE = "/usr/bin/flatpak"
 START_DIR = "/usr/bin/"
-LAUNCH_OPTIONS = '"run" "--branch=stable" "--arch=x86_64" "--command=couchplay" "io.github.hikaps.couchplay"'
+LAUNCH_OPTIONS = '"run" "--branch=stable" "--arch=x86_64" "--command=couchplay-gamemode" "io.github.hikaps.couchplay"'
 SHORTCUT_PATH = ""
 # Try to find the exported .desktop file for the shortcut path
 import glob
