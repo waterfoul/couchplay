@@ -636,7 +636,20 @@ from pathlib import Path
 
 APP_NAME = "CouchPlay"
 EXE = "/usr/bin/flatpak"
-LAUNCH_OPTIONS = "run io.github.hikaps.couchplay"
+START_DIR = "/usr/bin/"
+LAUNCH_OPTIONS = '"run" "--branch=stable" "--arch=x86_64" "--command=couchplay" "io.github.hikaps.couchplay"'
+SHORTCUT_PATH = ""
+# Try to find the exported .desktop file for the shortcut path
+import glob
+desktop_patterns = [
+    "/var/lib/flatpak/app/io.github.hikaps.couchplay/x86_64/stable/*/export/share/applications/io.github.hikaps.couchplay.desktop",
+    os.path.expanduser("~/.local/share/flatpak/app/io.github.hikaps.couchplay/x86_64/stable/*/export/share/applications/io.github.hikaps.couchplay.desktop"),
+]
+for pat in desktop_patterns:
+    matches = glob.glob(pat)
+    if matches:
+        SHORTCUT_PATH = matches[0]
+        break
 
 def calculate_appid(exe, appname):
     salt = f'"{exe}"{appname}'.encode("utf-8")
@@ -679,12 +692,16 @@ def add_shortcut(vdf_path):
     
     entry.append(0x01)
     entry.extend(b"StartDir\x00")
-    entry.extend(f'"{os.path.dirname(EXE)}"'.encode("utf-8") + b"\x00")
+    entry.extend(f'"{START_DIR}"'.encode("utf-8") + b"\x00")
     
     icon_path = str(vdf_path.parent / f"grid/{appid}_icon.png")
     entry.append(0x01)
     entry.extend(b"icon\x00")
     entry.extend(icon_path.encode("utf-8") + b"\x00")
+    
+    entry.append(0x01)
+    entry.extend(b"ShortcutPath\x00")
+    entry.extend(SHORTCUT_PATH.encode("utf-8") + b"\x00")
     
     entry.append(0x01)
     entry.extend(b"LaunchOptions\x00")
