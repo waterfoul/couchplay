@@ -15,7 +15,11 @@
         "--talk-name=org.freedesktop.Flatpak",
         "--talk-name=org.kde.KWin",
         "--system-talk-name=org.freedesktop.login1",
-        "--system-talk-name=io.github.hikaps.CouchPlayHelper"
+        "--system-talk-name=io.github.hikaps.CouchPlayHelper",
+        "--filesystem=~/.steam:ro",
+        "--filesystem=~/.local/share/Steam:ro",
+        "--filesystem=~/.var/app/com.valvesoftware.Steam/.steam:ro",
+        "--filesystem=~/.var/app/com.valvesoftware.Steam/.local/share/Steam:ro"
     ],
     "cleanup": [
         "/include",
