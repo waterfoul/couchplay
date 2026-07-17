@@ -173,11 +173,16 @@ if [ "$IS_FLATPAK" = true ]; then
     echo "  Sandbox WAYLAND_DISPLAY: ${WAYLAND_DISPLAY:-[unset]}"
     echo "  Sandbox DISPLAY: ${DISPLAY:-[unset]}"
     echo "  Sandbox XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR"
+    echo "  Sandbox STEAM_GAME_ID: ${STEAM_GAME_ID:-[unset]}"
+    echo "  Sandbox SteamAppId: ${SteamAppId:-[unset]}"
+    echo "  Sandbox SteamGameId: ${SteamGameId:-[unset]}"
     echo "  Host UID: $HOST_UID"
     echo "  Host XDG_RUNTIME_DIR: $HOST_RUNTIME_DIR"
     echo "  Resolved Host WAYLAND_DISPLAY: $HOST_WAYLAND_DISPLAY"
     echo "  Host runtime directory Wayland/Gamescope sockets:"
     flatpak-spawn --host sh -c "ls -la $HOST_RUNTIME_DIR | grep -E 'wayland|gamescope'" || true
+    echo "  Host flatpak-spawn environment (first 20 lines):"
+    flatpak-spawn --host printenv | head -n 20 || true
 
     # Define a persistent log file path inside the sandbox user settings (which maps to host user var folder)
     # to ensure it persists after the Flatpak container exits.
