@@ -794,10 +794,11 @@ install_sysext() {
     print_info "Installing via SteamOS System Extension (sysext)..."
     
     # Get asset URLs
-    local raw_url checksum_url flatpak_url
+    local raw_url checksum_url flatpak_url flatpak_checksum_url
     raw_url=$(get_asset_url "$release_json" "couchplay\.steamos\.raw")
     checksum_url=$(get_asset_url "$release_json" "couchplay\.steamos\.sha256")
     flatpak_url=$(get_asset_url "$release_json" "couchplay\.flatpak")
+    flatpak_checksum_url=$(get_asset_url "$release_json" "couchplay\.flatpak\.sha256")
     
     if [[ -z "$raw_url" ]]; then
         print_error "Could not find couchplay.steamos.raw asset in release"
@@ -811,6 +812,10 @@ install_sysext() {
         print_error "Could not find couchplay.flatpak asset in release"
         exit 1
     fi
+    if [[ -z "$flatpak_checksum_url" ]]; then
+        print_error "Could not find couchplay.flatpak.sha256 asset in release"
+        exit 1
+    fi
     
     # Setup temporary directory and cleanup trap
     TEMP_DIR=$(mktemp -d)
@@ -821,6 +826,7 @@ install_sysext() {
     local raw_file="${TEMP_DIR}/couchplay.steamos.raw"
     local checksum_file="${TEMP_DIR}/couchplay.steamos.sha256"
     local flatpak_file="${TEMP_DIR}/couchplay.flatpak"
+    local flatpak_checksum_file="${TEMP_DIR}/couchplay.flatpak.sha256"
     
     # Download files
     if ! download_file "$raw_url" "$raw_file"; then
@@ -832,9 +838,13 @@ install_sysext() {
     if ! download_file "$flatpak_url" "$flatpak_file"; then
         exit 1
     fi
+    if ! download_file "$flatpak_checksum_url" "$flatpak_checksum_file"; then
+        exit 1
+    fi
     
     # Verify checksum
     verify_checksum "$raw_file" "$checksum_file"
+    verify_checksum "$flatpak_file" "$flatpak_checksum_file"
     
     # 1. Install Flatpak
     print_info "Installing Flatpak bundle..."
@@ -842,9 +852,30 @@ install_sysext() {
         print_error "flatpak command not found. Please install flatpak first."
         exit 1
     fi
+    # Ensure the user Flatpak repository is in a clean state
+    print_info "Repairing user Flatpak repository..."
+    sudo -u "$REAL_USER" flatpak repair --user >/dev/null 2>&1 || true
+
     print_info "Ensuring org.kde.Platform 6.10 is installed..."
     sudo -u "$REAL_USER" flatpak install --user --noninteractive -y flathub org.kde.Platform/x86_64/6.10
-    sudo -u "$REAL_USER" flatpak install --user --noninteractive --reinstall -y "$flatpak_file"
+
+    # Try installing the bundle
+    if ! sudo -u "$REAL_USER" flatpak install --user --noninteractive --reinstall -y "$flatpak_file"; then
+        print_warn "Flatpak bundle installation failed. Attempting deep clean and retry..."
+        
+        # Try to uninstall any existing/conflicting installations of the app
+        sudo -u "$REAL_USER" flatpak uninstall --user --noninteractive -y io.github.hikaps.couchplay >/dev/null 2>&1 || true
+        
+        # Forcefully remove leftover files/directories that Flatpak got stuck on
+        rm -rf "${REAL_HOME}/.local/share/flatpak/app/io.github.hikaps.couchplay"
+        
+        # Repair again to ensure metadata matches the filesystem state
+        sudo -u "$REAL_USER" flatpak repair --user >/dev/null 2>&1 || true
+        
+        # Retry the installation
+        print_info "Retrying Flatpak bundle installation..."
+        sudo -u "$REAL_USER" flatpak install --user --noninteractive --reinstall -y "$flatpak_file"
+    fi
     
     # Stop existing CouchPlay helper service and systemd-sysext before upgrading
     print_info "Stopping active CouchPlay services..."

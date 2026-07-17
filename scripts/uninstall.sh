@@ -98,6 +98,9 @@ if command -v flatpak &>/dev/null; then
         print_info "Uninstalling Flatpak bundle (io.github.hikaps.couchplay)..."
         sudo -u "$REAL_USER" flatpak uninstall --user -y io.github.hikaps.couchplay || true
     fi
+    # Force clean up any leftover app files and repair repository to ensure clean state
+    rm -rf "${REAL_HOME}/.local/share/flatpak/app/io.github.hikaps.couchplay"
+    sudo -u "$REAL_USER" flatpak repair --user >/dev/null 2>&1 || true
 fi
 
 # Remove udev rules
