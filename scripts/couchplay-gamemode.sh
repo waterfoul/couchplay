@@ -203,6 +203,7 @@ if [ "$IS_FLATPAK" = true ]; then
         export STEAM_GAME_ID='${STEAM_GAME_ID:-}'
         export SteamAppId='${SteamAppId:-}'
         export SteamGameId='${SteamGameId:-}'
+        export QT_FORCE_STDERR_LOGGING=1
         kwin_wayland \
             --desktopfile io.github.hikaps.couchplay \
             --no-lockscreen \
@@ -282,7 +283,9 @@ export QT_LOGGING_RULES="couchplay.*=true"
 export QT_MESSAGE_PATTERN="[%{time hh:mm:ss.zzz}] %{if-category}%{category}: %{endif}%{message}"
 
 # Launch CouchPlay, blocking until it exits
-"$COUCHPLAY_BIN" "$@"
+GUI_LOG_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/couchplay-gui.log"
+echo "CouchPlay GUI output is being logged to: $GUI_LOG_FILE"
+"$COUCHPLAY_BIN" "$@" > "$GUI_LOG_FILE" 2>&1
 COUCHPLAY_EXIT=$?
 
 echo "CouchPlay exited with code $COUCHPLAY_EXIT"
