@@ -21,7 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_COMMAND=""
 if [ -x "$SCRIPT_DIR/../build/bin/couchplay" ]; then
     RUN_COMMAND="$SCRIPT_DIR/../build/bin/couchplay"
-elif flatpak info io.github.hikaps.couchplay &>/dev/null; then
+elif flatpak list --columns=application | grep -q "^io.github.hikaps.couchplay$"; then
     RUN_COMMAND="flatpak run"
 elif command -v couchplay &>/dev/null; then
     RUN_COMMAND="$(command -v couchplay)"
