@@ -115,132 +115,14 @@ echo "Starting nested KWin Wayland compositor..."
 SOCKET_NAME="wayland-couchplay"
 
 if [ "$IS_FLATPAK" = true ]; then
-    SOCKET_PATH="app/io.github.hikaps.couchplay/$SOCKET_NAME"
-else
-    SOCKET_PATH="$SOCKET_NAME"
-fi
-
-# Clean up any stale socket and lock files
-rm -f "$XDG_RUNTIME_DIR/$SOCKET_PATH"
-rm -f "$XDG_RUNTIME_DIR/${SOCKET_PATH}.lock"
-
-if [ "$IS_FLATPAK" = true ]; then
-    # Kill any stale kwin_wayland process running on the host from a previous session
-    flatpak-spawn --host pkill -f "kwin_wayland.*--socket.*$SOCKET_PATH" || true
-else
-    pkill -f "kwin_wayland.*--socket.*$SOCKET_PATH" || true
-fi
-
-# Start kwin_wayland as a nested compositor inside gamescope.
-# Only reached in Game Mode — kwin_wayland check is deferred to here
-# so Desktop Mode launches never fail due to a missing kwin_wayland.
-if [ "$IS_FLATPAK" = true ]; then
-    # When sandboxed, run kwin_wayland on the host via flatpak-spawn. The socket
-    # is placed inside the Flatpak app's XDG_RUNTIME_DIR subdirectory so it is
-    # accessible from inside the sandbox.
-    if ! flatpak-spawn --host sh -c "command -v kwin_wayland" &>/dev/null; then
-        echo "Error: kwin_wayland not found on host."
-        echo "Please install kwin_wayland on the host system."
+    # KWin is bundled inside the Flatpak at /app/bin/kwin_wayland
+    KWIN_BIN="/app/bin/kwin_wayland"
+    if [ ! -f "$KWIN_BIN" ]; then
+        echo "Error: Bundled kwin_wayland not found in Flatpak at $KWIN_BIN"
         exit 1
     fi
-
-    # 1. Resolve host base runtime directory
-    HOST_UID=$(flatpak-spawn --host id -u)
-    HOST_RUNTIME_DIR="/run/user/$HOST_UID"
-    if ! flatpak-spawn --host test -d "$HOST_RUNTIME_DIR"; then
-        HOST_RUNTIME_DIR="$XDG_RUNTIME_DIR"
-    fi
-
-    # 2. Resolve the host's active WAYLAND_DISPLAY (SteamOS uses gamescope-0, not wayland-0)
-    HOST_WAYLAND_DISPLAY=$(flatpak-spawn --host sh -c 'echo ${WAYLAND_DISPLAY:-}')
-    if [ -z "$HOST_WAYLAND_DISPLAY" ]; then
-        HOST_WAYLAND_DISPLAY=$(flatpak-spawn --host sh -c 'echo ${GAMESCOPE_WAYLAND_DISPLAY:-}')
-    fi
-    if [ -z "$HOST_WAYLAND_DISPLAY" ]; then
-        # Scan runtime directory for active sockets (gamescope-X or wayland-X)
-        HOST_WAYLAND_DISPLAY=$(flatpak-spawn --host sh -c "find $HOST_RUNTIME_DIR -maxdepth 1 \( -name 'gamescope-[0-9]' -o -name 'wayland-[0-9]' \) -type s | head -n 1")
-        if [ -n "$HOST_WAYLAND_DISPLAY" ]; then
-            HOST_WAYLAND_DISPLAY=$(basename "$HOST_WAYLAND_DISPLAY")
-        fi
-    fi
-    if [ -z "$HOST_WAYLAND_DISPLAY" ]; then
-        HOST_WAYLAND_DISPLAY="wayland-0"
-    fi
-
-    # 3. Print environment diagnostics
-    echo "CouchPlay Game Mode Launcher Diagnostics:"
-    echo "  IS_FLATPAK: $IS_FLATPAK"
-    echo "  Sandbox WAYLAND_DISPLAY: ${WAYLAND_DISPLAY:-[unset]}"
-    echo "  Sandbox DISPLAY: ${DISPLAY:-[unset]}"
-    echo "  Sandbox XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR"
-    echo "  Sandbox STEAM_GAME_ID: ${STEAM_GAME_ID:-[unset]}"
-    echo "  Sandbox SteamAppId: ${SteamAppId:-[unset]}"
-    echo "  Sandbox SteamGameId: ${SteamGameId:-[unset]}"
-    echo "  Host UID: $HOST_UID"
-    echo "  Host XDG_RUNTIME_DIR: $HOST_RUNTIME_DIR"
-    echo "  Resolved Host WAYLAND_DISPLAY: $HOST_WAYLAND_DISPLAY"
-    echo "  Host runtime directory Wayland/Gamescope sockets:"
-    flatpak-spawn --host sh -c "ls -la $HOST_RUNTIME_DIR | grep -E 'wayland|gamescope'" || true
-    echo "  Host flatpak-spawn environment (first 20 lines):"
-    flatpak-spawn --host printenv | head -n 20 || true
-
-    # Define a persistent log file path inside the sandbox user settings (which maps to host user var folder)
-    # to ensure it persists after the Flatpak container exits.
-    LOG_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/couchplay-kwin-wayland.log"
-    mkdir -p "$(dirname "$LOG_FILE")"
-
-    # Resolve the sandbox cgroup path so we can move host-spawned processes to it.
-    # This allows Steam's process tracker and Gamescope to associate host KWin with the game session.
-    CGROUP_PATH=""
-    if [ -f /proc/self/cgroup ]; then
-        CGROUP_PATH=$(cut -d: -f3 /proc/self/cgroup)
-        echo "Resolved sandbox cgroup path: $CGROUP_PATH"
-    else
-        echo "Warning: /proc/self/cgroup not found, cannot resolve cgroup path"
-    fi
-
-    # Clean up the previous log file
-    rm -f "$LOG_FILE"
-
-    # Resolve the host log path on the host filesystem
-    HOST_LOG_FILE="/home/deck/.var/app/io.github.hikaps.couchplay/cache/couchplay-kwin-wayland.log"
-
-    flatpak-spawn --host sh -c "
-        if [ -n '$CGROUP_PATH' ]; then
-            if [ -f '/sys/fs/cgroup$CGROUP_PATH/cgroup.procs' ]; then
-                echo \"Moving host process \$\$ to cgroup: $CGROUP_PATH\" >> '$HOST_LOG_FILE'
-                if echo \$\$ > '/sys/fs/cgroup$CGROUP_PATH/cgroup.procs'; then
-                    echo \"Successfully moved host process \$\$ to cgroup\" >> '$HOST_LOG_FILE'
-                else
-                    echo \"Error: Failed to write process \$\$ to /sys/fs/cgroup$CGROUP_PATH/cgroup.procs\" >> '$HOST_LOG_FILE'
-                fi
-            else
-                echo \"Error: cgroup.procs file not found at /sys/fs/cgroup$CGROUP_PATH/cgroup.procs\" >> '$HOST_LOG_FILE'
-            fi
-        else
-            echo \"Warning: No cgroup path resolved, skipping cgroup alignment\" >> '$HOST_LOG_FILE'
-        fi
-
-        export XDG_RUNTIME_DIR='$HOST_RUNTIME_DIR'
-        export WAYLAND_DISPLAY='$HOST_WAYLAND_DISPLAY'
-        export DISPLAY='${DISPLAY:-}'
-        export XAUTHORITY='${XAUTHORITY:-}'
-        export GAMESCOPE_WAYLAND_DISPLAY='${GAMESCOPE_WAYLAND_DISPLAY:-}'
-        export XDG_SESSION_TYPE='${XDG_SESSION_TYPE:-wayland}'
-        export XDG_CURRENT_DESKTOP='${XDG_CURRENT_DESKTOP:-gamescope}'
-        export STEAM_GAME_ID='${STEAM_GAME_ID:-${SteamGameId:-$SteamAppId}}'
-        export SteamAppId='${SteamAppId:-}'
-        export SteamGameId='${SteamGameId:-}'
-        export QT_FORCE_STDERR_LOGGING=1
-        exec kwin_wayland \
-            --desktopfile io.github.hikaps.couchplay \
-            --no-lockscreen \
-            --no-global-shortcuts \
-            --width '${GAMESCOPE_WIDTH:-1920}' \
-            --height '${GAMESCOPE_HEIGHT:-1080}' \
-            --socket '$SOCKET_PATH' \
-            >> '$HOST_LOG_FILE' 2>&1
-    " &
+    # Force KWin to connect to the host's wayland-0 socket exposed in the sandbox
+    export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
 else
     if ! command -v kwin_wayland &>/dev/null; then
         echo "Error: kwin_wayland not found."
@@ -248,14 +130,32 @@ else
         exit 1
     fi
     KWIN_BIN="$(command -v kwin_wayland)"
-    "$KWIN_BIN" \
-        --no-lockscreen \
-        --no-global-shortcuts \
-        --width "${GAMESCOPE_WIDTH:-1920}" \
-        --height "${GAMESCOPE_HEIGHT:-1080}" \
-        --socket "$SOCKET_NAME" \
-        &
 fi
+
+# Clean up any stale socket and lock files
+rm -f "$XDG_RUNTIME_DIR/$SOCKET_NAME"
+rm -f "$XDG_RUNTIME_DIR/${SOCKET_NAME}.lock"
+
+# Kill any stale kwin_wayland process running inside the sandbox/session
+pkill -f "kwin_wayland.*--socket.*$SOCKET_NAME" || true
+
+# Define a persistent log file path inside the sandbox user settings (which maps to host user var folder)
+LOG_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/couchplay-kwin-wayland.log"
+mkdir -p "$(dirname "$LOG_FILE")"
+rm -f "$LOG_FILE"
+
+# Start kwin_wayland directly in the background
+# Under Flatpak, running KWin inside the sandbox ensures its PID is part of Steam's
+# process tree and cgroup, allowing Gamescope to match and focus KWin's nested window.
+export QT_FORCE_STDERR_LOGGING=1
+"$KWIN_BIN" \
+    --desktopfile io.github.hikaps.couchplay \
+    --no-lockscreen \
+    --no-global-shortcuts \
+    --width "${GAMESCOPE_WIDTH:-1920}" \
+    --height "${GAMESCOPE_HEIGHT:-1080}" \
+    --socket "$SOCKET_NAME" \
+    > "$LOG_FILE" 2>&1 &
 
 KWIN_PID=$!
 
@@ -263,7 +163,7 @@ KWIN_PID=$!
 echo "Waiting for nested KWin Wayland socket..."
 SOCKET_FOUND=false
 for i in $(seq 1 20); do
-    if [ -S "$XDG_RUNTIME_DIR/$SOCKET_PATH" ]; then
+    if [ -S "$XDG_RUNTIME_DIR/$SOCKET_NAME" ]; then
         SOCKET_FOUND=true
         break
     fi
@@ -271,12 +171,12 @@ for i in $(seq 1 20); do
 done
 
 if [ "$SOCKET_FOUND" = true ]; then
-    echo "Found nested KWin Wayland socket: $SOCKET_PATH"
-    export WAYLAND_DISPLAY="$SOCKET_PATH"
+    echo "Found nested KWin Wayland socket: $SOCKET_NAME"
+    export WAYLAND_DISPLAY="$SOCKET_NAME"
 else
     echo "Warning: Nested KWin Wayland socket not found. Falling back to default."
     if [ "$IS_FLATPAK" = true ]; then
-        echo "Host kwin_wayland log ($LOG_FILE):"
+        echo "kwin_wayland log ($LOG_FILE):"
         tail -n 20 "$LOG_FILE" || true
     fi
 fi
