@@ -171,6 +171,11 @@ if [ "$IS_FLATPAK" = true ]; then
     echo "  Host runtime directory Wayland/Gamescope sockets:"
     flatpak-spawn --host sh -c "ls -la $HOST_RUNTIME_DIR | grep -E 'wayland|gamescope'" || true
 
+    # Define a persistent log file path inside the sandbox user settings (which maps to host user var folder)
+    # to ensure it persists after the Flatpak container exits.
+    LOG_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/couchplay-kwin-wayland.log"
+    mkdir -p "$(dirname "$LOG_FILE")"
+
     flatpak-spawn --host \
         --env=XDG_RUNTIME_DIR="$HOST_RUNTIME_DIR" \
         --env=WAYLAND_DISPLAY="$HOST_WAYLAND_DISPLAY" \
@@ -182,7 +187,7 @@ if [ "$IS_FLATPAK" = true ]; then
         --width "${GAMESCOPE_WIDTH:-1920}" \
         --height "${GAMESCOPE_HEIGHT:-1080}" \
         --socket "$SOCKET_PATH" \
-        > /tmp/couchplay-kwin-wayland.log 2>&1 &
+        > "$LOG_FILE" 2>&1 &
 else
     if ! command -v kwin_wayland &>/dev/null; then
         echo "Error: kwin_wayland not found."
@@ -218,8 +223,8 @@ if [ "$SOCKET_FOUND" = true ]; then
 else
     echo "Warning: Nested KWin Wayland socket not found. Falling back to default."
     if [ "$IS_FLATPAK" = true ]; then
-        echo "Host kwin_wayland log (/tmp/couchplay-kwin-wayland.log):"
-        tail -n 20 /tmp/couchplay-kwin-wayland.log || true
+        echo "Host kwin_wayland log ($LOG_FILE):"
+        tail -n 20 "$LOG_FILE" || true
     fi
 fi
 
