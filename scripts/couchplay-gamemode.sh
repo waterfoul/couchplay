@@ -189,10 +189,21 @@ if [ "$IS_FLATPAK" = true ]; then
     LOG_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/couchplay-kwin-wayland.log"
     mkdir -p "$(dirname "$LOG_FILE")"
 
+    # Resolve the sandbox cgroup path so we can move host-spawned processes to it.
+    # This allows Steam's process tracker and Gamescope to associate host KWin with the game session.
+    CGROUP_PATH=""
+    if [ -f /proc/self/cgroup ]; then
+        CGROUP_PATH=$(cut -d: -f3 /proc/self/cgroup)
+    fi
+
     # Resolve the host log path on the host filesystem
     HOST_LOG_FILE="/home/deck/.var/app/io.github.hikaps.couchplay/cache/couchplay-kwin-wayland.log"
 
     flatpak-spawn --host sh -c "
+        if [ -n '$CGROUP_PATH' ] && [ -f '/sys/fs/cgroup$CGROUP_PATH/cgroup.procs' ]; then
+            echo \$\$ > '/sys/fs/cgroup$CGROUP_PATH/cgroup.procs' || true
+        fi
+
         export XDG_RUNTIME_DIR='$HOST_RUNTIME_DIR'
         export WAYLAND_DISPLAY='$HOST_WAYLAND_DISPLAY'
         export DISPLAY='${DISPLAY:-}'
