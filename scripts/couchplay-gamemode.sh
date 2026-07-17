@@ -194,14 +194,31 @@ if [ "$IS_FLATPAK" = true ]; then
     CGROUP_PATH=""
     if [ -f /proc/self/cgroup ]; then
         CGROUP_PATH=$(cut -d: -f3 /proc/self/cgroup)
+        echo "Resolved sandbox cgroup path: $CGROUP_PATH"
+    else
+        echo "Warning: /proc/self/cgroup not found, cannot resolve cgroup path"
     fi
+
+    # Clean up the previous log file
+    rm -f "$LOG_FILE"
 
     # Resolve the host log path on the host filesystem
     HOST_LOG_FILE="/home/deck/.var/app/io.github.hikaps.couchplay/cache/couchplay-kwin-wayland.log"
 
     flatpak-spawn --host sh -c "
-        if [ -n '$CGROUP_PATH' ] && [ -f '/sys/fs/cgroup$CGROUP_PATH/cgroup.procs' ]; then
-            echo \$\$ > '/sys/fs/cgroup$CGROUP_PATH/cgroup.procs' || true
+        if [ -n '$CGROUP_PATH' ]; then
+            if [ -f '/sys/fs/cgroup$CGROUP_PATH/cgroup.procs' ]; then
+                echo \"Moving host process \$\$ to cgroup: $CGROUP_PATH\" >> '$HOST_LOG_FILE'
+                if echo \$\$ > '/sys/fs/cgroup$CGROUP_PATH/cgroup.procs'; then
+                    echo \"Successfully moved host process \$\$ to cgroup\" >> '$HOST_LOG_FILE'
+                else
+                    echo \"Error: Failed to write process \$\$ to /sys/fs/cgroup$CGROUP_PATH/cgroup.procs\" >> '$HOST_LOG_FILE'
+                fi
+            else
+                echo \"Error: cgroup.procs file not found at /sys/fs/cgroup$CGROUP_PATH/cgroup.procs\" >> '$HOST_LOG_FILE'
+            fi
+        else
+            echo \"Warning: No cgroup path resolved, skipping cgroup alignment\" >> '$HOST_LOG_FILE'
         fi
 
         export XDG_RUNTIME_DIR='$HOST_RUNTIME_DIR'
@@ -222,7 +239,7 @@ if [ "$IS_FLATPAK" = true ]; then
             --width '${GAMESCOPE_WIDTH:-1920}' \
             --height '${GAMESCOPE_HEIGHT:-1080}' \
             --socket '$SOCKET_PATH' \
-            > '$HOST_LOG_FILE' 2>&1
+            >> '$HOST_LOG_FILE' 2>&1
     " &
 else
     if ! command -v kwin_wayland &>/dev/null; then
