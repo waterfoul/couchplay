@@ -196,6 +196,7 @@ if [ "$IS_FLATPAK" = true ]; then
         export XDG_SESSION_TYPE='${XDG_SESSION_TYPE:-wayland}'
         export XDG_CURRENT_DESKTOP='${XDG_CURRENT_DESKTOP:-gamescope}'
         kwin_wayland \
+            --desktopfile io.github.hikaps.couchplay \
             --no-lockscreen \
             --no-global-shortcuts \
             --width '${GAMESCOPE_WIDTH:-1920}' \
