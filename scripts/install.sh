@@ -651,6 +651,57 @@ for pat in desktop_patterns:
         SHORTCUT_PATH = matches[0]
         break
 
+def parse_vdf(data, pos=0):
+    res = {}
+    while pos < len(data):
+        if pos >= len(data):
+            break
+        type_byte = data[pos]
+        if type_byte == 8:
+            return res, pos + 1
+        pos += 1
+        key_end = data.find(b'\x00', pos)
+        if key_end == -1:
+            break
+        key = data[pos:key_end].decode('utf-8', errors='replace')
+        pos = key_end + 1
+        
+        if type_byte == 0:
+            val, pos = parse_vdf(data, pos)
+            res[key] = val
+        elif type_byte == 1:
+            val_end = data.find(b'\x00', pos)
+            if val_end == -1:
+                break
+            val = data[pos:val_end].decode('utf-8', errors='replace')
+            pos = val_end + 1
+            res[key] = val
+        elif type_byte == 2:
+            if pos + 4 > len(data):
+                break
+            val = struct.unpack('<I', data[pos:pos+4])[0]
+            pos += 4
+            res[key] = val
+    return res, pos
+
+def serialize_vdf(obj):
+    res = bytearray()
+    for key, val in obj.items():
+        if isinstance(val, dict):
+            res.append(0)
+            res.extend(key.encode('utf-8') + b'\x00')
+            res.extend(serialize_vdf(val))
+        elif isinstance(val, str):
+            res.append(1)
+            res.extend(key.encode('utf-8') + b'\x00')
+            res.extend(val.encode('utf-8') + b'\x00')
+        elif isinstance(val, int):
+            res.append(2)
+            res.extend(key.encode('utf-8') + b'\x00')
+            res.extend(struct.pack('<I', val))
+    res.append(8)
+    return res
+
 def calculate_appid(exe, appname):
     salt = f'"{exe}"{appname}'.encode("utf-8")
     return (binascii.crc32(salt) | 0x80000000) & 0xffffffff
@@ -663,9 +714,22 @@ def add_shortcut(vdf_path):
         with open(vdf_path, "rb") as f:
             data = f.read()
             
-    if f"\x01appname\x00{APP_NAME}\x00".encode("utf-8") in data:
-        return calculate_appid(EXE, APP_NAME), False
-        
+    # Always clean/remove any existing CouchPlay shortcut to ensure it gets updated to the latest parameters
+    if data.startswith(b'\x00shortcuts\x00'):
+        try:
+            shortcuts, _ = parse_vdf(data, 11)
+            new_shortcuts = {}
+            idx = 0
+            for k in sorted(shortcuts.keys(), key=lambda x: int(x) if x.isdigit() else 999999):
+                entry = shortcuts[k]
+                if isinstance(entry, dict) and entry.get('appname') == 'CouchPlay':
+                    continue
+                new_shortcuts[str(idx)] = entry
+                idx += 1
+            data = b'\x00shortcuts\x00' + serialize_vdf(new_shortcuts)
+        except Exception as e:
+            pass
+            
     idx = 0
     while True:
         if f"\x00{idx}\x00".encode("ascii") in data:
