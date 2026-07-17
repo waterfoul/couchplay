@@ -71,8 +71,11 @@ mkdir -p "$STAGE_DIR/usr/share/polkit-1/actions"
 mkdir -p "$STAGE_DIR/usr/share/pipewire/pipewire-pulse.conf.d"
 mkdir -p "$STAGE_DIR/usr/lib/extension-release.d"
 
-print_info "Copying helper binary..."
+print_info "Copying helper binary and launcher script..."
 cp "$HELPER_BIN" "$STAGE_DIR/usr/local/libexec/couchplay-helper"
+mkdir -p "$STAGE_DIR/usr/local/bin"
+cp "$PROJECT_DIR/scripts/couchplay-gamemode.sh" "$STAGE_DIR/usr/local/bin/couchplay-gamemode"
+chmod +x "$STAGE_DIR/usr/local/bin/couchplay-gamemode"
 
 # Bundle helper's runtime libraries (RPATH is $ORIGIN/../lib/couchplay)
 print_info "Bundling runtime libraries..."
