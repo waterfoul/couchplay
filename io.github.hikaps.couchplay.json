@@ -85,48 +85,71 @@
             "name": "kwin-wayland-bin",
             "buildsystem": "simple",
             "build-commands": [
+                "mkdir -p extracted",
+                "cd extracted && for rpm in ../*.rpm; do python3 -c \"import sys; d=open(sys.argv[1],'rb').read(); idx=d.find(b'\\x28\\xb5\\x2f\\xfd'); open('payload.zst','wb').write(d[idx:])\" \"$rpm\" && zstd -d -c payload.zst | cpio -idm && rm -f payload.zst; done && cd ..",
                 "mkdir -p ${FLATPAK_DEST}/bin",
                 "mkdir -p ${FLATPAK_DEST}/lib",
                 "mkdir -p ${FLATPAK_DEST}/share",
-                "cp -r usr/bin/* ${FLATPAK_DEST}/bin/ || true",
-                "cp -r usr/lib/* ${FLATPAK_DEST}/lib/ || true",
-                "cp -r usr/share/* ${FLATPAK_DEST}/share/ || true"
+                "cp -r extracted/usr/bin/* ${FLATPAK_DEST}/bin/ || true",
+                "cp -r extracted/usr/lib/* ${FLATPAK_DEST}/lib/ || true",
+                "cp -r extracted/usr/lib64/* ${FLATPAK_DEST}/lib/ || true",
+                "cp -r extracted/usr/share/* ${FLATPAK_DEST}/share/ || true",
+                "rm -rf extracted"
             ],
             "sources": [
                 {
-                    "type": "archive",
-                    "url": "https://archive.archlinux.org/packages/k/kwin/kwin-6.7.3-1-x86_64.pkg.tar.zst",
-                    "sha256": "51343705f917280604e0cb9f1cb2d1ceef479cfc78773ee0466e3b35f36e148d"
+                    "type": "file",
+                    "url": "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/Packages/k/kwin-wayland-6.2.1.1-1.fc41.x86_64.rpm",
+                    "sha256": "8b6e45f6c65f4807a6e979e8fea22a6e7f0ac29b73d2169f3c888bb17385a866",
+                    "dest-filename": "kwin-wayland.rpm"
                 },
                 {
-                    "type": "archive",
-                    "url": "https://archive.archlinux.org/packages/k/kdecoration/kdecoration-6.7.3-1-x86_64.pkg.tar.zst",
-                    "sha256": "5c1f9e7e66da9639d795f7e9bffab7c642bc12d9d3ae45f0ecb99baac8393691"
+                    "type": "file",
+                    "url": "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/Packages/k/kwin-common-6.2.1.1-1.fc41.x86_64.rpm",
+                    "sha256": "fd28d3276b7dbfc9c9267666b6d8343b8d5ea2444f288c63d3eb8683949deee7",
+                    "dest-filename": "kwin-common.rpm"
                 },
                 {
-                    "type": "archive",
-                    "url": "https://archive.archlinux.org/packages/l/libdisplay-info/libdisplay-info-0.3.0-1-x86_64.pkg.tar.zst",
-                    "sha256": "07ab1479ec5e70aea174e2d0e340bd9364b507ed74f2df3bfd51b3c6f40e5787"
+                    "type": "file",
+                    "url": "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/Packages/k/kwin-libs-6.2.1.1-1.fc41.x86_64.rpm",
+                    "sha256": "a533a7b7d556da5717c5ef9746b8fb99f06fdc8cb56efe5c3a774d26172c29da",
+                    "dest-filename": "kwin-libs.rpm"
                 },
                 {
-                    "type": "archive",
-                    "url": "https://archive.archlinux.org/packages/l/libei/libei-1.6.0-1-x86_64.pkg.tar.zst",
-                    "sha256": "b395ee31992a3de68217fec11be54be98182cb8f40f657247c16d335081db842"
+                    "type": "file",
+                    "url": "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/Packages/k/kdecoration-6.2.1-1.fc41.x86_64.rpm",
+                    "sha256": "9070ccdbb258f337d561e8590718f666f04ea219fa60396092e3762af8965cce",
+                    "dest-filename": "kdecoration.rpm"
                 },
                 {
-                    "type": "archive",
-                    "url": "https://archive.archlinux.org/packages/l/libqaccessibilityclient-qt6/libqaccessibilityclient-qt6-0.6.0-4-x86_64.pkg.tar.zst",
-                    "sha256": "e478d9abacfcc7381bb21a2d06659524072904119edba89607165d74fb8dd801"
+                    "type": "file",
+                    "url": "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/Packages/k/kpipewire-6.2.1-1.fc41.x86_64.rpm",
+                    "sha256": "03a67c94c74cc6e9c07d47a652087a04b69ee5a75509c714a98012320fe45aa9",
+                    "dest-filename": "kpipewire.rpm"
                 },
                 {
-                    "type": "archive",
-                    "url": "https://archive.archlinux.org/packages/k/kscreenlocker/kscreenlocker-6.7.3-1-x86_64.pkg.tar.zst",
-                    "sha256": "d76ee23258fe6f586736985885f8264ec2dbbe13e63caf38c3d9cee4b8aa8ffa"
+                    "type": "file",
+                    "url": "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/Packages/k/kscreenlocker-6.2.1-1.fc41.x86_64.rpm",
+                    "sha256": "2716c11411e2ca9746e97ff0d12ece4aa7de5daf70b03eb5563b74ea774182d1",
+                    "dest-filename": "kscreenlocker.rpm"
                 },
                 {
-                    "type": "archive",
-                    "url": "https://archive.archlinux.org/packages/k/kpipewire/kpipewire-6.7.3-1-x86_64.pkg.tar.zst",
-                    "sha256": "3f65e6daa6506e4c775575c4c1770d9476c6ee9002de871822fc32aab6185635"
+                    "type": "file",
+                    "url": "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/Packages/l/libdisplay-info-0.2.0-2.fc41.x86_64.rpm",
+                    "sha256": "886b7901ac5722266e2e20d438c2d4fdaa6ade78a4d120ec8d67a0917284afb0",
+                    "dest-filename": "libdisplay-info.rpm"
+                },
+                {
+                    "type": "file",
+                    "url": "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/Packages/l/libei-1.3.0-1.fc41.x86_64.rpm",
+                    "sha256": "b2c4a50ef40145f43f58852fdb8bccf67d964a9a5c92967dadc7a7fd8275b328",
+                    "dest-filename": "libei.rpm"
+                },
+                {
+                    "type": "file",
+                    "url": "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/Packages/q/qaccessibilityclient-qt6-0.6.0-2.fc41.x86_64.rpm",
+                    "sha256": "b20d2c6fb5e5c47a7b8704b58b09f6d5abff58e445e443c8a1cdab0f82444245",
+                    "dest-filename": "qaccessibilityclient-qt6.rpm"
                 }
             ]
         },
