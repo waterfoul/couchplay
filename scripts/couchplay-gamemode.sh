@@ -114,8 +114,14 @@ echo "Starting nested KWin Wayland compositor..."
 
 SOCKET_NAME="wayland-couchplay"
 
+if [ "$IS_FLATPAK" = true ]; then
+    SOCKET_PATH="app/io.github.hikaps.couchplay/$SOCKET_NAME"
+else
+    SOCKET_PATH="$SOCKET_NAME"
+fi
+
 # Clean up any stale socket
-rm -f "$XDG_RUNTIME_DIR/$SOCKET_NAME"
+rm -f "$XDG_RUNTIME_DIR/$SOCKET_PATH"
 
 # Start kwin_wayland as a nested compositor inside gamescope.
 # Only reached in Game Mode — kwin_wayland check is deferred to here
@@ -175,7 +181,7 @@ if [ "$IS_FLATPAK" = true ]; then
         --no-global-shortcuts \
         --width "${GAMESCOPE_WIDTH:-1920}" \
         --height "${GAMESCOPE_HEIGHT:-1080}" \
-        --socket "app/io.github.hikaps.couchplay/$SOCKET_NAME" \
+        --socket "$SOCKET_PATH" \
         > /tmp/couchplay-kwin-wayland.log 2>&1 &
 else
     if ! command -v kwin_wayland &>/dev/null; then
@@ -199,7 +205,7 @@ KWIN_PID=$!
 echo "Waiting for nested KWin Wayland socket..."
 SOCKET_FOUND=false
 for i in $(seq 1 20); do
-    if [ -S "$XDG_RUNTIME_DIR/$SOCKET_NAME" ]; then
+    if [ -S "$XDG_RUNTIME_DIR/$SOCKET_PATH" ]; then
         SOCKET_FOUND=true
         break
     fi
@@ -207,13 +213,13 @@ for i in $(seq 1 20); do
 done
 
 if [ "$SOCKET_FOUND" = true ]; then
-    echo "Found nested KWin Wayland socket: $SOCKET_NAME"
-    export WAYLAND_DISPLAY="$SOCKET_NAME"
+    echo "Found nested KWin Wayland socket: $SOCKET_PATH"
+    export WAYLAND_DISPLAY="$SOCKET_PATH"
 else
     echo "Warning: Nested KWin Wayland socket not found. Falling back to default."
     if [ "$IS_FLATPAK" = true ]; then
         echo "Host kwin_wayland log (/tmp/couchplay-kwin-wayland.log):"
-        flatpak-spawn --host tail -n 20 /tmp/couchplay-kwin-wayland.log || true
+        tail -n 20 /tmp/couchplay-kwin-wayland.log || true
     fi
 fi
 
