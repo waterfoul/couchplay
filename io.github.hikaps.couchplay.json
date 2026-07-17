@@ -3,7 +3,7 @@
     "runtime": "org.kde.Platform",
     "runtime-version": "6.10",
     "sdk": "org.kde.Sdk",
-    "command": "couchplay-gamemode",
+    "command": "couchplay",
     "finish-args": [
         "--share=ipc",
         "--share=network",
@@ -80,79 +80,6 @@
                     "sha256": "491108728f120ce05b539934b41a750235031a6df8abc6b47e57aff7de15094d"
                 }
             ]
-        },
-        {
-            "name": "kwin-wayland-bin",
-            "buildsystem": "simple",
-            "build-commands": [
-                "mkdir -p extracted",
-                "cd extracted && for rpm in ../*.rpm; do python3 -c \"import sys; d=open(sys.argv[1],'rb').read(); idx=d.find(b'\\x28\\xb5\\x2f\\xfd'); open('payload.zst','wb').write(d[idx:])\" \"$rpm\" && zstd -d -c payload.zst | cpio -idm && rm -f payload.zst; done && cd ..",
-                "mkdir -p ${FLATPAK_DEST}/bin",
-                "mkdir -p ${FLATPAK_DEST}/lib",
-                "mkdir -p ${FLATPAK_DEST}/share",
-                "cp -r extracted/usr/bin/* ${FLATPAK_DEST}/bin/ || true",
-                "cp -r extracted/usr/lib/* ${FLATPAK_DEST}/lib/ || true",
-                "cp -r extracted/usr/lib64/* ${FLATPAK_DEST}/lib/ || true",
-                "cp -r extracted/usr/share/* ${FLATPAK_DEST}/share/ || true",
-                "rm -rf extracted"
-            ],
-            "sources": [
-                {
-                    "type": "file",
-                    "url": "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/Packages/k/kwin-wayland-6.2.1.1-1.fc41.x86_64.rpm",
-                    "sha256": "8b6e45f6c65f4807a6e979e8fea22a6e7f0ac29b73d2169f3c888bb17385a866",
-                    "dest-filename": "kwin-wayland.rpm"
-                },
-                {
-                    "type": "file",
-                    "url": "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/Packages/k/kwin-common-6.2.1.1-1.fc41.x86_64.rpm",
-                    "sha256": "fd28d3276b7dbfc9c9267666b6d8343b8d5ea2444f288c63d3eb8683949deee7",
-                    "dest-filename": "kwin-common.rpm"
-                },
-                {
-                    "type": "file",
-                    "url": "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/Packages/k/kwin-libs-6.2.1.1-1.fc41.x86_64.rpm",
-                    "sha256": "a533a7b7d556da5717c5ef9746b8fb99f06fdc8cb56efe5c3a774d26172c29da",
-                    "dest-filename": "kwin-libs.rpm"
-                },
-                {
-                    "type": "file",
-                    "url": "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/Packages/k/kdecoration-6.2.1-1.fc41.x86_64.rpm",
-                    "sha256": "9070ccdbb258f337d561e8590718f666f04ea219fa60396092e3762af8965cce",
-                    "dest-filename": "kdecoration.rpm"
-                },
-                {
-                    "type": "file",
-                    "url": "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/Packages/k/kpipewire-6.2.1-1.fc41.x86_64.rpm",
-                    "sha256": "03a67c94c74cc6e9c07d47a652087a04b69ee5a75509c714a98012320fe45aa9",
-                    "dest-filename": "kpipewire.rpm"
-                },
-                {
-                    "type": "file",
-                    "url": "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/Packages/k/kscreenlocker-6.2.1-1.fc41.x86_64.rpm",
-                    "sha256": "2716c11411e2ca9746e97ff0d12ece4aa7de5daf70b03eb5563b74ea774182d1",
-                    "dest-filename": "kscreenlocker.rpm"
-                },
-                {
-                    "type": "file",
-                    "url": "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/Packages/l/libdisplay-info-0.2.0-2.fc41.x86_64.rpm",
-                    "sha256": "886b7901ac5722266e2e20d438c2d4fdaa6ade78a4d120ec8d67a0917284afb0",
-                    "dest-filename": "libdisplay-info.rpm"
-                },
-                {
-                    "type": "file",
-                    "url": "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/Packages/l/libei-1.3.0-1.fc41.x86_64.rpm",
-                    "sha256": "b2c4a50ef40145f43f58852fdb8bccf67d964a9a5c92967dadc7a7fd8275b328",
-                    "dest-filename": "libei.rpm"
-                },
-                {
-                    "type": "file",
-                    "url": "https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/41/Everything/x86_64/os/Packages/q/qaccessibilityclient-qt6-0.6.0-2.fc41.x86_64.rpm",
-                    "sha256": "b20d2c6fb5e5c47a7b8704b58b09f6d5abff58e445e443c8a1cdab0f82444245",
-                    "dest-filename": "qaccessibilityclient-qt6.rpm"
-                }
-            ]
-        },
         {
             "name": "couchplay",
             "buildsystem": "cmake-ninja",

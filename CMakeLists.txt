@@ -100,11 +100,13 @@ install(FILES data/pipewire/50-couchplay.conf
     DESTINATION ${CMAKE_INSTALL_PREFIX}/share/pipewire/pipewire-pulse.conf.d
 )
 
-# Install Game Mode launcher script
-install(PROGRAMS scripts/couchplay-gamemode.sh
-    DESTINATION ${KDE_INSTALL_BINDIR}
-    RENAME couchplay-gamemode
-)
+# Install Game Mode launcher script (only when not building inside Flatpak)
+if(NOT CMAKE_INSTALL_PREFIX STREQUAL "/app")
+    install(PROGRAMS scripts/couchplay-gamemode.sh
+        DESTINATION ${KDE_INSTALL_BINDIR}
+        RENAME couchplay-gamemode
+    )
+endif()
 
 # Summary
 feature_summary(WHAT ALL INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES)
