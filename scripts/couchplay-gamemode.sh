@@ -184,18 +184,25 @@ if [ "$IS_FLATPAK" = true ]; then
     LOG_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/couchplay-kwin-wayland.log"
     mkdir -p "$(dirname "$LOG_FILE")"
 
-    flatpak-spawn --host \
-        --env=XDG_RUNTIME_DIR="$HOST_RUNTIME_DIR" \
-        --env=WAYLAND_DISPLAY="$HOST_WAYLAND_DISPLAY" \
-        --env=DISPLAY="${DISPLAY:-}" \
-        --env=XAUTHORITY="${XAUTHORITY:-}" \
+    # Resolve the host log path on the host filesystem
+    HOST_LOG_FILE="/home/deck/.var/app/io.github.hikaps.couchplay/cache/couchplay-kwin-wayland.log"
+
+    flatpak-spawn --host sh -c "
+        export XDG_RUNTIME_DIR='$HOST_RUNTIME_DIR'
+        export WAYLAND_DISPLAY='$HOST_WAYLAND_DISPLAY'
+        export DISPLAY='${DISPLAY:-}'
+        export XAUTHORITY='${XAUTHORITY:-}'
+        export GAMESCOPE_WAYLAND_DISPLAY='${GAMESCOPE_WAYLAND_DISPLAY:-}'
+        export XDG_SESSION_TYPE='${XDG_SESSION_TYPE:-wayland}'
+        export XDG_CURRENT_DESKTOP='${XDG_CURRENT_DESKTOP:-gamescope}'
         kwin_wayland \
-        --no-lockscreen \
-        --no-global-shortcuts \
-        --width "${GAMESCOPE_WIDTH:-1920}" \
-        --height "${GAMESCOPE_HEIGHT:-1080}" \
-        --socket "$SOCKET_PATH" \
-        > "$LOG_FILE" 2>&1 &
+            --no-lockscreen \
+            --no-global-shortcuts \
+            --width '${GAMESCOPE_WIDTH:-1920}' \
+            --height '${GAMESCOPE_HEIGHT:-1080}' \
+            --socket '$SOCKET_PATH' \
+            > '$HOST_LOG_FILE' 2>&1
+    " &
 else
     if ! command -v kwin_wayland &>/dev/null; then
         echo "Error: kwin_wayland not found."
