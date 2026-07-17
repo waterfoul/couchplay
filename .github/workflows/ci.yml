@@ -41,6 +41,8 @@ jobs:
           cp build/bin/couchplay-helper pkg/bin/
           cp scripts/install-helper.sh pkg/
           chmod +x pkg/install-helper.sh
+          mkdir -p pkg/scripts
+          cp scripts/couchplay-gamemode.sh pkg/scripts/
           cp -r data/* pkg/data/
           VERSION="${{ github.event.pull_request.number || 'develop' }}"
           tar -czf couchplay-${VERSION}-linux.tar.gz -C pkg .
