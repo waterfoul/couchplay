@@ -120,8 +120,16 @@ else
     SOCKET_PATH="$SOCKET_NAME"
 fi
 
-# Clean up any stale socket
+# Clean up any stale socket and lock files
 rm -f "$XDG_RUNTIME_DIR/$SOCKET_PATH"
+rm -f "$XDG_RUNTIME_DIR/${SOCKET_PATH}.lock"
+
+if [ "$IS_FLATPAK" = true ]; then
+    # Kill any stale kwin_wayland process running on the host from a previous session
+    flatpak-spawn --host pkill -f "kwin_wayland.*--socket.*$SOCKET_PATH" || true
+else
+    pkill -f "kwin_wayland.*--socket.*$SOCKET_PATH" || true
+fi
 
 # Start kwin_wayland as a nested compositor inside gamescope.
 # Only reached in Game Mode — kwin_wayland check is deferred to here
