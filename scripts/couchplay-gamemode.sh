@@ -161,18 +161,18 @@ export QT_LOGGING_RULES="couchplay.*=true"
 export QT_MESSAGE_PATTERN="[%{time hh:mm:ss.zzz}] %{if-category}%{category}: %{endif}%{message}"
 
 # Launch CouchPlay, blocking until it exits
+GUI_LOG_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/couchplay-gui.log"
+echo "CouchPlay GUI output is being logged to: $GUI_LOG_FILE"
+
 if [ "$RUN_COMMAND" = "flatpak run" ]; then
     exec flatpak run \
         --env=WAYLAND_DISPLAY="$SOCKET_PATH" \
         --env=QT_QPA_PLATFORM=wayland \
         --env=QT_LOGGING_RULES="$QT_LOGGING_RULES" \
         --env=QT_MESSAGE_PATTERN="$QT_MESSAGE_PATTERN" \
-        io.github.hikaps.couchplay "$@"
+        io.github.hikaps.couchplay "$@" > "$GUI_LOG_FILE" 2>&1
 else
     export WAYLAND_DISPLAY="$SOCKET_PATH"
     export QT_QPA_PLATFORM=wayland
-    
-    GUI_LOG_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/couchplay-gui.log"
-    echo "CouchPlay GUI output is being logged to: $GUI_LOG_FILE"
     exec "$RUN_COMMAND" "$@" > "$GUI_LOG_FILE" 2>&1
 fi
