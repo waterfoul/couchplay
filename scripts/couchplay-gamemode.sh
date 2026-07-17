@@ -52,14 +52,34 @@ fi
 is_game_mode() {
     # SteamOS Game Mode runs inside a gamescope session.
     # Check for the gamescope-specific env var or the session type.
-    if [ -n "${GAMESCOPE_WAYLAND_DISPLAY:-}" ]; then
-        return 0
+    if [ "$IS_FLATPAK" = true ]; then
+        # 1. Try checking the active session's Desktop via loginctl on the host
+        local host_desktop=""
+        host_desktop=$(flatpak-spawn --host sh -c 'loginctl show-session $(loginctl show-user $(id -un) | awk -F= "/^Display=/ {print \$2}") -p Desktop --value' 2>/dev/null) || true
+        if [ "$host_desktop" = "gamescope" ]; then
+            return 0
+        fi
+
+        # 2. Try checking if gamescope is in the host environment or running
+        if flatpak-spawn --host sh -c 'env' | grep -qE "^(GAMESCOPE_WAYLAND_DISPLAY|SteamGamepadUI|XDG_CURRENT_DESKTOP=gamescope)="; then
+            return 0
+        fi
+
+        if flatpak-spawn --host sh -c 'pgrep -x gamescope' &>/dev/null; then
+            return 0
+        fi
+
+        return 1
+    else
+        if [ -n "${GAMESCOPE_WAYLAND_DISPLAY:-}" ]; then
+            return 0
+        fi
+        # Alternative: check if the parent compositor is gamescope
+        if [ -n "${SteamGamepadUI:-}" ] || [ "${XDG_CURRENT_DESKTOP:-}" = "gamescope" ]; then
+            return 0
+        fi
+        return 1
     fi
-    # Alternative: check if the parent compositor is gamescope
-    if [ -n "${SteamGamepadUI:-}" ] || [ "${XDG_CURRENT_DESKTOP:-}" = "gamescope" ]; then
-        return 0
-    fi
-    return 1
 }
 
 # --- Cleanup ---
@@ -109,7 +129,11 @@ if [ "$IS_FLATPAK" = true ]; then
         echo "Please install kwin_wayland on the host system."
         exit 1
     fi
-    flatpak-spawn --host kwin_wayland \
+    flatpak-spawn --host \
+        --env=WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
+        --env=DISPLAY="${DISPLAY:-}" \
+        --env=XAUTHORITY="${XAUTHORITY:-}" \
+        kwin_wayland \
         --no-lockscreen \
         --no-global-shortcuts \
         --width "${GAMESCOPE_WIDTH:-1920}" \
