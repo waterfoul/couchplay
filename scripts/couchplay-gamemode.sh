@@ -129,7 +129,17 @@ if [ "$IS_FLATPAK" = true ]; then
         echo "Please install kwin_wayland on the host system."
         exit 1
     fi
+
+    # Resolve the host's base runtime directory (usually /run/user/1000)
+    # to avoid nested session path overrides and ensure proper socket visibility.
+    HOST_UID=$(flatpak-spawn --host id -u)
+    HOST_RUNTIME_DIR="/run/user/$HOST_UID"
+    if ! flatpak-spawn --host test -d "$HOST_RUNTIME_DIR"; then
+        HOST_RUNTIME_DIR="$XDG_RUNTIME_DIR"
+    fi
+
     flatpak-spawn --host \
+        --env=XDG_RUNTIME_DIR="$HOST_RUNTIME_DIR" \
         --env=WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
         --env=DISPLAY="${DISPLAY:-}" \
         --env=XAUTHORITY="${XAUTHORITY:-}" \
