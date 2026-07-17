@@ -195,6 +195,9 @@ if [ "$IS_FLATPAK" = true ]; then
         export GAMESCOPE_WAYLAND_DISPLAY='${GAMESCOPE_WAYLAND_DISPLAY:-}'
         export XDG_SESSION_TYPE='${XDG_SESSION_TYPE:-wayland}'
         export XDG_CURRENT_DESKTOP='${XDG_CURRENT_DESKTOP:-gamescope}'
+        export STEAM_GAME_ID='${STEAM_GAME_ID:-}'
+        export SteamAppId='${SteamAppId:-}'
+        export SteamGameId='${SteamGameId:-}'
         kwin_wayland \
             --desktopfile io.github.hikaps.couchplay \
             --no-lockscreen \
