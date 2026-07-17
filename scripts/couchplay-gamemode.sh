@@ -130,17 +130,44 @@ if [ "$IS_FLATPAK" = true ]; then
         exit 1
     fi
 
-    # Resolve the host's base runtime directory (usually /run/user/1000)
-    # to avoid nested session path overrides and ensure proper socket visibility.
+    # 1. Resolve host base runtime directory
     HOST_UID=$(flatpak-spawn --host id -u)
     HOST_RUNTIME_DIR="/run/user/$HOST_UID"
     if ! flatpak-spawn --host test -d "$HOST_RUNTIME_DIR"; then
         HOST_RUNTIME_DIR="$XDG_RUNTIME_DIR"
     fi
 
+    # 2. Resolve the host's active WAYLAND_DISPLAY (SteamOS uses gamescope-0, not wayland-0)
+    HOST_WAYLAND_DISPLAY=$(flatpak-spawn --host sh -c 'echo ${WAYLAND_DISPLAY:-}')
+    if [ -z "$HOST_WAYLAND_DISPLAY" ]; then
+        HOST_WAYLAND_DISPLAY=$(flatpak-spawn --host sh -c 'echo ${GAMESCOPE_WAYLAND_DISPLAY:-}')
+    fi
+    if [ -z "$HOST_WAYLAND_DISPLAY" ]; then
+        # Scan runtime directory for active sockets (gamescope-X or wayland-X)
+        HOST_WAYLAND_DISPLAY=$(flatpak-spawn --host sh -c "find $HOST_RUNTIME_DIR -maxdepth 1 \( -name 'gamescope-[0-9]' -o -name 'wayland-[0-9]' \) -type s | head -n 1")
+        if [ -n "$HOST_WAYLAND_DISPLAY" ]; then
+            HOST_WAYLAND_DISPLAY=$(basename "$HOST_WAYLAND_DISPLAY")
+        fi
+    fi
+    if [ -z "$HOST_WAYLAND_DISPLAY" ]; then
+        HOST_WAYLAND_DISPLAY="wayland-0"
+    fi
+
+    # 3. Print environment diagnostics
+    echo "CouchPlay Game Mode Launcher Diagnostics:"
+    echo "  IS_FLATPAK: $IS_FLATPAK"
+    echo "  Sandbox WAYLAND_DISPLAY: ${WAYLAND_DISPLAY:-[unset]}"
+    echo "  Sandbox DISPLAY: ${DISPLAY:-[unset]}"
+    echo "  Sandbox XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR"
+    echo "  Host UID: $HOST_UID"
+    echo "  Host XDG_RUNTIME_DIR: $HOST_RUNTIME_DIR"
+    echo "  Resolved Host WAYLAND_DISPLAY: $HOST_WAYLAND_DISPLAY"
+    echo "  Host runtime directory Wayland/Gamescope sockets:"
+    flatpak-spawn --host sh -c "ls -la $HOST_RUNTIME_DIR | grep -E 'wayland|gamescope'" || true
+
     flatpak-spawn --host \
         --env=XDG_RUNTIME_DIR="$HOST_RUNTIME_DIR" \
-        --env=WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
+        --env=WAYLAND_DISPLAY="$HOST_WAYLAND_DISPLAY" \
         --env=DISPLAY="${DISPLAY:-}" \
         --env=XAUTHORITY="${XAUTHORITY:-}" \
         kwin_wayland \
@@ -149,7 +176,7 @@ if [ "$IS_FLATPAK" = true ]; then
         --width "${GAMESCOPE_WIDTH:-1920}" \
         --height "${GAMESCOPE_HEIGHT:-1080}" \
         --socket "app/io.github.hikaps.couchplay/$SOCKET_NAME" \
-        &
+        > /tmp/couchplay-kwin-wayland.log 2>&1 &
 else
     if ! command -v kwin_wayland &>/dev/null; then
         echo "Error: kwin_wayland not found."
@@ -184,6 +211,10 @@ if [ "$SOCKET_FOUND" = true ]; then
     export WAYLAND_DISPLAY="$SOCKET_NAME"
 else
     echo "Warning: Nested KWin Wayland socket not found. Falling back to default."
+    if [ "$IS_FLATPAK" = true ]; then
+        echo "Host kwin_wayland log (/tmp/couchplay-kwin-wayland.log):"
+        flatpak-spawn --host tail -n 20 /tmp/couchplay-kwin-wayland.log || true
+    fi
 fi
 
 # Wait for KWin to register on D-Bus (up to 10 seconds)

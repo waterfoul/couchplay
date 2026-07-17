@@ -599,7 +599,7 @@ configure_steam_shortcut() {
         "steam_vertical_capsule.jpg:p:.jpg"
         "steam_horizontal_grid.jpg::.jpg"
         "steam_hero.jpg:_hero:.jpg"
-        "steam_logo.jpg:_logo:.jpg"
+        "steam_logo.png:_logo:.png"
         "icon.png:_icon:.png"
     )
 
